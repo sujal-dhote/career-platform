@@ -151,7 +151,7 @@ User question: ${message}`
 **Placements:** Mphasis (16L), LTIMindtree (15.9L), Infosys (10.5L), TCS, HCL, Cognizant and more.`
       }
 
-      const finalResponse = aiResponse + '\n\n---\n📄 **Want to know more about NRsolution4u?**\nExplore our complete profile, achievements, and services:\n👉 [View NRsolution4u Full Profile](https://nrsolution4u.com/profile24.pdf)'
+      const finalResponse = aiResponse + '\n\n---\n📄 **Want to know more about NRsolution4u?**\nExplore our complete profile, achievements, and services:\n👉 [View NRsolution4u Full Profile]https://nrsolution4u.com/profile24.pdf'
 
       // Save to DB
       let savedSessionId = incomingSessionId || null
