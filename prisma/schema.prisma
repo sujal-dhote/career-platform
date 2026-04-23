@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  password        String
+  name            String?
+  emailVerified   Boolean       @default(false)
+  verificationOTP String?
+  otpExpiry       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  theme           String        @default("dark")
+  chatSessions    ChatSession[]
+
+  @@map("users")
+}
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  userId    String
+  agentType String
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  role      String
+  content   String      @db.NVarChar(Max)
+  createdAt DateTime    @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model Company {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?       @db.NVarChar(Max)
+  industry      String?
+  location      String?
+  website       String?
+  createdAt     DateTime      @default(now())
+  opportunities Opportunity[]
+
+  @@map("companies")
+}
+
+model Opportunity {
+  id           String   @id @default(cuid())
+  title        String
+  description  String   @db.NVarChar(Max)
+  type         String
+  companyId    String?
+  location     String?
+  requirements String?  @db.NVarChar(Max)
+  benefits     String?  @db.NVarChar(Max)
+  salary       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company? @relation(fields: [companyId], references: [id])
+
+  @@map("opportunities")
+}
