@@ -115,38 +115,43 @@ export async function POST(request: NextRequest) {
     const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
     let response = ''
 
-    for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
-      for (const modelName of models) {
-        try {
-          const model = getGenAI(keyIdx).getGenerativeModel({ model: modelName })
+    // 3 full rounds of all keys + all models
+    for (let round = 0; round < 3; round++) {
+      for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
+        for (const modelName of models) {
+          try {
+            const model = getGenAI(keyIdx).getGenerativeModel({ model: modelName })
 
-          let result
-          if (isWordDoc) {
-            // Send as plain text prompt for Word docs
-            const textContent = buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim()
-            const prompt = isResume
-              ? `${resumePrompt}\n\nResume content:\n${textContent.slice(0, 8000)}`
-              : `${question}\n\nFile content:\n${textContent.slice(0, 8000)}`
-            result = await model.generateContent(prompt)
-          } else {
-            const base64 = buffer.toString('base64')
-            const mimeType = file.type as any
-            result = await model.generateContent([
-              { inlineData: { mimeType, data: base64 } },
-              { text: isResume ? resumePrompt : `You are a helpful career assistant. ${question}` }
-            ])
-          }
+            let result
+            if (isWordDoc) {
+              const textContent = buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim()
+              const prompt = isResume
+                ? `${resumePrompt}\n\nResume content:\n${textContent.slice(0, 8000)}`
+                : `${question}\n\nFile content:\n${textContent.slice(0, 8000)}`
+              result = await model.generateContent(prompt)
+            } else {
+              const base64 = buffer.toString('base64')
+              const mimeType = file.type as any
+              result = await model.generateContent([
+                { inlineData: { mimeType, data: base64 } },
+                { text: isResume ? resumePrompt : `You are a helpful career assistant. ${question}` }
+              ])
+            }
 
-          response = result.response.text()
-          break
-        } catch (e: any) {
-          if (e?.status === 503 || e?.status === 429) {
-            await new Promise(resolve => setTimeout(resolve, 1500))
+            response = result.response.text()
+            break
+          } catch (e: any) {
+            if (e?.status === 503 || e?.status === 429) {
+              // Wait longer each round
+              const waitMs = (round + 1) * 2000
+              await new Promise(resolve => setTimeout(resolve, waitMs))
+              continue
+            }
+            console.error(`Model ${modelName} error:`, e?.message)
             continue
           }
-          console.error(`Model ${modelName} error:`, e?.message)
-          continue
         }
+        if (response) break
       }
       if (response) break
     }
