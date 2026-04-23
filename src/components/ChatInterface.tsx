@@ -272,18 +272,21 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
       timestamp: new Date(), fileName: selectedFile.name
     }
     setMessages(prev => [...prev, userMessage])
-    const question = input.trim() || 'Analyze this file and give career-related insights.'
+    const question = input.trim() || (agentType === 'resume_analyzer' ? 'Analyze this resume and provide detailed scoring report.' : 'Analyze this file and give career-related insights.')
     setInput('')
     setSelectedFile(null)
     try {
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('question', question)
+      formData.append('agentType', agentType)
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       const data = await res.json()
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: res.ok ? data.response : (data.error || 'Failed to analyze file.'), timestamp: new Date() }])
-    } catch {
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: 'Error analyzing file. Please try again.', timestamp: new Date() }])
+      const content = res.ok ? (data.response || 'File analyzed successfully.') : (data.error || 'Failed to analyze file.')
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content, timestamp: new Date() }])
+    } catch (err) {
+      console.error('File upload error:', err)
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: '⚠️ File upload timed out. Please try again with a smaller file or use PDF format.', timestamp: new Date() }])
     } finally { setFileUploading(false) }
   }
 

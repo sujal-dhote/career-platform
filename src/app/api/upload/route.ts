@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const question = (formData.get('question') as string) || 'Analyze this file and give career-related insights.'
+    const agentType = (formData.get('agentType') as string) || ''
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
@@ -101,9 +102,9 @@ export async function POST(request: NextRequest) {
     if (!allowedTypes.includes(file.type))
       return NextResponse.json({ error: 'File type not supported. Use images, PDF, Word, or TXT.' }, { status: 400 })
 
-    const isResume = /resume|cv/i.test(file.name) ||
-      /resume|cv|curriculum/i.test(question) ||
-      question === 'Analyze this file and give career-related insights.'
+    const isResume = agentType === 'resume_analyzer' ||
+      /resume|cv/i.test(file.name) ||
+      /resume|cv|curriculum/i.test(question)
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
@@ -115,8 +116,8 @@ export async function POST(request: NextRequest) {
     const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
     let response = ''
 
-    // 3 full rounds of all keys + all models
-    for (let round = 0; round < 3; round++) {
+    // 2 rounds max to stay within Vercel 60s timeout
+    for (let round = 0; round < 2; round++) {
       for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
         for (const modelName of models) {
           try {
@@ -142,12 +143,10 @@ export async function POST(request: NextRequest) {
             break
           } catch (e: any) {
             if (e?.status === 503 || e?.status === 429) {
-              // Wait longer each round
-              const waitMs = (round + 1) * 2000
-              await new Promise(resolve => setTimeout(resolve, waitMs))
+              await new Promise(resolve => setTimeout(resolve, (round + 1) * 2000))
               continue
             }
-            console.error(`Model ${modelName} error:`, e?.message)
+            console.error(`Model ${modelName} key${keyIdx} error:`, e?.status, e?.message)
             continue
           }
         }
