@@ -106,8 +106,6 @@ export async function POST(request: NextRequest) {
 
       const prompt = `${NRSOLUTION_KNOWLEDGE}
 
-${langInstruction}
-
 RULES:
 - Give SPECIFIC details from the knowledge base above
 - Keep response SHORT (3-5 sentences or bullet points max)
@@ -115,6 +113,8 @@ RULES:
 - If asked for YouTube/videos/photos — give prayatn link + Instagram + phone
 - NEVER say you don't have information — use the data above
 ${historyText}
+
+IMPORTANT LANGUAGE RULE: ${langInstruction} You MUST respond ONLY in this language. Do not use any other language.
 
 User question: ${message}`
 
