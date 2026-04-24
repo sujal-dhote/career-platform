@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const apiKeys = [
+  process.env.GEMINI_API_KEY!,
+  process.env.GEMINI_API_KEY_2!,
+  process.env.GEMINI_API_KEY_3!,
+].filter(Boolean)
 
-// Use the fastest model for translation
-const TRANSLATION_MODEL = 'gemini-2.5-flash-lite'
+const TRANSLATION_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash']
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,17 +44,36 @@ ${messages.map((msg: string, idx: number) => `${idx + 1}. ${msg}`).join('\n')}
 
 Return format: One translation per line, numbered 1-${messages.length}`
 
-    const model = genAI.getGenerativeModel({ 
-      model: TRANSLATION_MODEL,
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 4096,
-      }
+    const model = new GoogleGenerativeAI(apiKeys[0]).getGenerativeModel({
+      model: TRANSLATION_MODELS[0],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
     })
-    
-    const result = await model.generateContent(batchPrompt)
-    const response = result.response
-    const translatedText = response.text().trim()
+
+    let translatedText = ''
+    for (let ki = 0; ki < apiKeys.length; ki++) {
+      for (const modelName of TRANSLATION_MODELS) {
+        try {
+          const m = new GoogleGenerativeAI(apiKeys[ki]).getGenerativeModel({
+            model: modelName,
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+          })
+          const result = await m.generateContent(batchPrompt)
+          translatedText = result.response.text().trim()
+          break
+        } catch (e: any) {
+          if (e?.status === 503 || e?.status === 429) {
+            await new Promise(r => setTimeout(r, 1000))
+            continue
+          }
+          continue
+        }
+      }
+      if (translatedText) break
+    }
+
+    if (!translatedText) {
+      return NextResponse.json({ translations: messages, targetLanguage })
+    }
 
     // Parse the numbered translations
     const translations = translatedText
@@ -77,9 +99,8 @@ Return format: One translation per line, numbered 1-${messages.length}`
     })
   } catch (error) {
     console.error('Batch translation error:', error)
-    const { messages } = await request.json()
     return NextResponse.json(
-      { error: 'Translation failed', translations: messages || [] },
+      { translations: messages || [], targetLanguage: '' },
       { status: 200 }
     )
   }

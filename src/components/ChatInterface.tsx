@@ -140,9 +140,18 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
   }
 
   const translateMessages = async (newLanguage: LanguageCode) => {
-    if (messages.length <= 1) return
     setIsTranslating(true)
     try {
+      // Always update welcome message in new language
+      const welcomeMsg = getWelcomeMessage(agentType, newLanguage)
+
+      if (messages.length <= 1) {
+        // Only welcome message — just replace it
+        setMessages([welcomeMsg])
+        setIsTranslating(false)
+        return
+      }
+
       const messagesToTranslate = messages.slice(1)
       const res = await fetch('/api/translate-batch', {
         method: 'POST',
@@ -152,10 +161,16 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
       if (res.ok) {
         const data = await res.json()
         const translated = messagesToTranslate.map((msg, idx) => ({ ...msg, content: data.translations[idx] || msg.content }))
-        setMessages([getWelcomeMessage(agentType, newLanguage), ...translated])
+        setMessages([welcomeMsg, ...translated])
+      } else {
+        // Translation API failed — at least update welcome message
+        setMessages(prev => [welcomeMsg, ...prev.slice(1)])
       }
-    } catch (e) { console.error('Translation error', e) }
-    finally { setIsTranslating(false) }
+    } catch (e) {
+      console.error('Translation error', e)
+      // On error — still update welcome message
+      setMessages(prev => [getWelcomeMessage(agentType, newLanguage), ...prev.slice(1)])
+    } finally { setIsTranslating(false) }
   }
 
   const handleLanguageChange = async (newLanguage: LanguageCode) => {
