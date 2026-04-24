@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { findQAMatch } from './nrsolution-qa'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY_3 || process.env.GEMINI_API_KEY!)
 
 // Updated model names based on official Google AI documentation (February 2026)
 const modelNames = [

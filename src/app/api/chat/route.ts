@@ -9,6 +9,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 const apiKeys = [
   process.env.GEMINI_API_KEY!,
   process.env.GEMINI_API_KEY_2!,
+  process.env.GEMINI_API_KEY_3!,
 ].filter(Boolean)
 
 function getGenAI(keyIndex = 0) {
