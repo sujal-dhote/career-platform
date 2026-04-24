@@ -4,17 +4,11 @@
   "framework": "nextjs",
   "regions": ["sin1"],
   "functions": {
-    "src/app/api/upload/route.ts": {
+    "app/api/upload/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/chat/route.ts": {
+    "app/api/chat/route.ts": {
       "maxDuration": 60
-    },
-    "src/app/api/chat/sessions/route.ts": {
-      "maxDuration": 30
-    },
-    "src/app/api/chat/sessions/[sessionId]/route.ts": {
-      "maxDuration": 30
     }
   }
 }

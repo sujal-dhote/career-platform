@@ -6,6 +6,8 @@ import { findQAMatch } from '@/lib/nrsolution-qa'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
+export const maxDuration = 60 // Vercel max for Hobby plan
+
 const apiKeys = [
   process.env.GEMINI_API_KEY!,
   process.env.GEMINI_API_KEY_2!,

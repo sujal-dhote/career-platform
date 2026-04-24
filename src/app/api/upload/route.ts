@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { findQAMatch } from '@/lib/nrsolution-qa'
 
+export const maxDuration = 60 // Vercel max for Hobby plan
+
 const apiKeys = [
   process.env.GEMINI_API_KEY!,
   process.env.GEMINI_API_KEY_2!,
