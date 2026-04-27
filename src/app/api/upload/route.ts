@@ -156,7 +156,12 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ response, fileName: file.name })
+    return NextResponse.json({
+      response: isResume
+        ? response + '\n\n---\n\n### 📥 Download ATS-Friendly Resume Template\n\nImprove your resume using this professionally designed ATS-optimized template:\n\n**[⬇️ Download ATS Resume Template (PDF)](https://career-platform-omega.vercel.app/ats-resume-template.pdf)**\n\n> This template follows all ATS best practices — clean formatting, proper sections, keyword-optimized structure.'
+        : response,
+      fileName: file.name
+    })
 
   } catch (error: any) {
     console.error('Upload error:', error)
