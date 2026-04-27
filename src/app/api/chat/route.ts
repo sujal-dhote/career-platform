@@ -5,6 +5,7 @@ import { NRSOLUTION_KNOWLEDGE } from '@/lib/nrsolution-data'
 import { findQAMatch } from '@/lib/nrsolution-qa'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { searchJobs, extractJobQuery } from '@/lib/parallel-search'
 
 export const maxDuration = 60 // Vercel max for Hobby plan
 
@@ -163,6 +164,32 @@ User question: ${message}`
         if (savedSessionId !== 'guest') {
           saveMessages(savedSessionId, message, finalResponse)
         }
+      }
+
+      return NextResponse.json({ response: finalResponse, sessionId: savedSessionId || 'demo-session' })
+    }
+
+    // For job and internship agents — add live search results
+    if (agentType === 'job' || agentType === 'internship') {
+      const isJobQuery = /job|work|hiring|vacancy|opening|position|career|salary|apply|recruit/i.test(message)
+      const isInternQuery = /internship|intern|training|stipend|fresher/i.test(message)
+
+      let liveResults = ''
+      if (isJobQuery || isInternQuery) {
+        const { query, objective } = extractJobQuery(message)
+        liveResults = await searchJobs(query, objective)
+      }
+
+      const aiResponse = await generateResponse(message, agentType, conversationHistory || [], language || 'en')
+
+      const finalResponse = liveResults
+        ? `${aiResponse}\n\n---\n🔍 **Live ${agentType === 'internship' ? 'Internship' : 'Job'} Listings:**\n\n${liveResults}\n\n> Results fetched live from the web`
+        : aiResponse
+
+      let savedSessionId = incomingSessionId || null
+      if (userEmail) {
+        savedSessionId = await getOrCreateSession(userEmail, agentType, incomingSessionId, message)
+        if (savedSessionId !== 'guest') saveMessages(savedSessionId, message, finalResponse)
       }
 
       return NextResponse.json({ response: finalResponse, sessionId: savedSessionId || 'demo-session' })
