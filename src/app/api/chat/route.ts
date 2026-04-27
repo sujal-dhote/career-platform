@@ -5,7 +5,7 @@ import { NRSOLUTION_KNOWLEDGE } from '@/lib/nrsolution-data'
 import { findQAMatch } from '@/lib/nrsolution-qa'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { searchJobs, extractJobQuery, generateJobLinks } from '@/lib/parallel-search'
+import { fetchJobListings, formatJobResults } from '@/lib/parallel-search'
 
 export const maxDuration = 60 // Vercel max for Hobby plan
 
@@ -169,26 +169,17 @@ User question: ${message}`
       return NextResponse.json({ response: finalResponse, sessionId: savedSessionId || 'demo-session' })
     }
 
-    // For job and internship agents — add live search results
+    // For job and internship agents — fetch actual job listings
     if (agentType === 'job' || agentType === 'internship') {
-      const isJobQuery = /job|work|hiring|vacancy|opening|position|career|salary|apply|recruit|find|search|looking|want|need|get/i.test(message)
-      const isInternQuery = /internship|intern|training|stipend|fresher|student/i.test(message)
+      const isJobQuery = /job|work|hiring|vacancy|opening|position|career|apply|recruit|find|search|looking|want|need|get|internship|intern/i.test(message)
 
-      const aiResponse = await generateResponse(message, agentType, conversationHistory || [], language || 'en')
+      const [aiResponse, jobResults] = await Promise.all([
+        generateResponse(message, agentType, conversationHistory || [], language || 'en'),
+        isJobQuery ? fetchJobListings(message, agentType) : Promise.resolve([])
+      ])
 
-      let finalResponse = aiResponse
-
-      if (isJobQuery || isInternQuery) {
-        // Generate proper working job portal links
-        const jobLinks = generateJobLinks(message, agentType)
-
-        // Also try Parallel AI for additional results (non-blocking)
-        const { query, objective } = extractJobQuery(message)
-        const parallelResults = await searchJobs(query, objective).catch(() => '')
-
-        const label = agentType === 'internship' ? 'Internship' : 'Job'
-        finalResponse = `${aiResponse}\n\n---\n🔍 **Live ${label} Search Links:**\n\n${jobLinks}${parallelResults ? '\n\n**Additional Results:**\n' + parallelResults : ''}`
-      }
+      const jobSection = formatJobResults(jobResults, agentType)
+      const finalResponse = aiResponse + jobSection
 
       let savedSessionId = incomingSessionId || null
       if (userEmail) {

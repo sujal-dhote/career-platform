@@ -1,135 +1,144 @@
-// Job Search — generates proper working search links using known job portal URL patterns
+// Parallel AI — fetch actual job listings with direct apply links
 
-export function generateJobLinks(message: string, agentType: string): string {
-  const msg = message.toLowerCase()
-  const isInternship = agentType === 'internship' || /internship|intern|training/i.test(msg)
-
-  // Extract role from message
-  const roles = [
-    'python developer', 'java developer', 'javascript developer', 'react developer',
-    'node.js developer', 'angular developer', 'vue developer', 'full stack developer',
-    'frontend developer', 'backend developer', '.net developer', 'dotnet developer',
-    'php developer', 'android developer', 'ios developer', 'flutter developer',
-    'data scientist', 'data analyst', 'machine learning engineer', 'ai engineer',
-    'devops engineer', 'cloud engineer', 'aws engineer', 'cybersecurity analyst',
-    'ui ux designer', 'graphic designer', 'digital marketing', 'seo specialist',
-    'content writer', 'business analyst', 'project manager', 'software engineer',
-    'web developer', 'mobile developer', 'database administrator', 'sql developer'
-  ]
-
-  let detectedRole = roles.find(r => msg.includes(r)) || ''
-
-  // Single word tech detection
-  if (!detectedRole) {
-    const techs = ['python', 'java', 'react', 'angular', 'node', 'flutter', 'android',
-      'php', 'dotnet', '.net', 'devops', 'aws', 'data science', 'machine learning',
-      'ui ux', 'graphic', 'marketing', 'seo', 'content']
-    const found = techs.find(t => msg.includes(t))
-    if (found) detectedRole = found + (isInternship ? ' intern' : ' developer')
-  }
-
-  if (!detectedRole) detectedRole = isInternship ? 'software intern' : 'software developer'
-
-  // Location detection
-  const cities = ['nagpur', 'pune', 'mumbai', 'bangalore', 'bengaluru', 'hyderabad',
-    'delhi', 'noida', 'gurgaon', 'chennai', 'kolkata', 'ahmedabad', 'remote']
-  const city = cities.find(c => msg.includes(c)) || ''
-
-  // Encode for URLs
-  const roleEncoded = encodeURIComponent(detectedRole)
-  const cityEncoded = city ? encodeURIComponent(city) : ''
-  const roleSlug = detectedRole.replace(/\s+/g, '-').replace(/\./g, '')
-  const citySlug = city ? city.replace(/\s+/g, '-') : ''
-
-  const links: string[] = []
-
-  if (isInternship) {
-    // Internshala — best for Indian internships
-    const internshalaQuery = encodeURIComponent(detectedRole.replace(' intern', '').replace(' developer', ''))
-    links.push(`1. 🎓 **[Internshala — ${detectedRole}](https://internshala.com/internships/${internshalaQuery.toLowerCase()}-internship/)** — India's top internship platform`)
-
-    // LinkedIn Internships
-    const liQuery = encodeURIComponent(detectedRole + ' internship ' + city)
-    links.push(`2. 💼 **[LinkedIn — ${detectedRole} Internship](https://www.linkedin.com/jobs/search/?keywords=${liQuery}&f_JT=I)** — Professional network jobs`)
-
-    // Indeed Internships
-    const indeedQ = encodeURIComponent(detectedRole + ' internship')
-    const indeedL = cityEncoded || 'India'
-    links.push(`3. 🔍 **[Indeed — ${detectedRole} Internship](https://in.indeed.com/jobs?q=${indeedQ}&l=${indeedL})** — Thousands of listings`)
-
-    // Naukri Fresher
-    links.push(`4. 📋 **[Naukri — Fresher ${detectedRole}](https://www.naukri.com/${roleSlug}-jobs${citySlug ? '-in-' + citySlug : ''}?experience=0)** — India's #1 job portal`)
-
-    // Unstop
-    links.push(`5. 🏆 **[Unstop — ${detectedRole} Internship](https://unstop.com/internships?search=${roleEncoded})** — Competitions & internships`)
-
-  } else {
-    // LinkedIn Jobs
-    const liQuery = encodeURIComponent(detectedRole + ' ' + city)
-    links.push(`1. 💼 **[LinkedIn — ${detectedRole} Jobs](https://www.linkedin.com/jobs/search/?keywords=${liQuery})** — Professional network`)
-
-    // Naukri
-    links.push(`2. 📋 **[Naukri — ${detectedRole}](https://www.naukri.com/${roleSlug}-jobs${citySlug ? '-in-' + citySlug : ''})** — India's #1 job portal`)
-
-    // Indeed
-    const indeedQ = encodeURIComponent(detectedRole)
-    const indeedL = cityEncoded || 'India'
-    links.push(`3. 🔍 **[Indeed — ${detectedRole}](https://in.indeed.com/jobs?q=${indeedQ}&l=${indeedL})** — Global job search`)
-
-    // Glassdoor
-    const gdRole = roleSlug
-    links.push(`4. ⭐ **[Glassdoor — ${detectedRole}](https://www.glassdoor.co.in/Job/${gdRole}-jobs-SRCH_KO0,${gdRole.length}.htm)** — Jobs + company reviews`)
-
-    // Shine
-    links.push(`5. ✨ **[Shine — ${detectedRole}](https://www.shine.com/job-search/${roleSlug}-jobs${citySlug ? '-in-' + citySlug : ''})** — Quick apply jobs`)
-
-    // Wellfound for tech
-    if (/developer|engineer|data|devops|cloud|ai|ml/i.test(detectedRole)) {
-      links.push(`6. 🚀 **[Wellfound — ${detectedRole}](https://wellfound.com/jobs?q=${roleEncoded})** — Startup jobs`)
-    }
-  }
-
-  return links.join('\n\n')
+interface JobResult {
+  title: string
+  url: string
+  company?: string
+  location?: string
+  snippet?: string
 }
 
-// Keep Parallel AI search as optional enhancement
-export async function searchJobs(query: string, objective: string): Promise<string> {
+export async function fetchJobListings(message: string, agentType: string): Promise<JobResult[]> {
   const apiKey = process.env.PARALLEL_AI_KEY
-  if (!apiKey) return ''
+  if (!apiKey) return []
+
+  const isInternship = agentType === 'internship' || /internship|intern/i.test(message)
+
+  // Build targeted search queries for actual job listings
+  const queries = buildSearchQueries(message, isInternship)
 
   try {
     const response = await fetch('https://api.parallel.ai/v1/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
       body: JSON.stringify({
-        search_queries: [query],
+        search_queries: queries,
         mode: 'advanced',
-        advanced_settings: { max_results: 5 },
-        objective,
+        advanced_settings: { max_results: 10 },
+        objective: `Find actual ${isInternship ? 'internship' : 'job'} listings with direct apply links. Focus on LinkedIn jobs, Naukri listings, Indeed job posts, Internshala listings. Return only actual job postings not search pages.`
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(12000),
     })
 
-    if (!response.ok) return ''
+    if (!response.ok) return []
 
     const data = await response.json()
     const results = data.results || []
 
-    return results
-      .filter((r: any) => r.url && r.title && !r.url.includes('linkedin.com/in/'))
-      .slice(0, 4)
-      .map((r: any, i: number) => `${i + 1}. **[${r.title}](${r.url})**`)
-      .join('\n\n')
-  } catch {
-    return ''
+    // Filter to only actual job listing pages
+    const jobResults: JobResult[] = results
+      .filter((r: any) => {
+        const url = r.url || ''
+        const title = r.title || ''
+        // Keep only actual job listing URLs
+        return (
+          url.includes('linkedin.com/jobs/view') ||
+          url.includes('naukri.com/job-listings') ||
+          url.includes('indeed.com/viewjob') ||
+          url.includes('internshala.com/internship/detail') ||
+          url.includes('glassdoor.com/job-listing') ||
+          url.includes('unstop.com/internships/') ||
+          url.includes('wellfound.com/jobs/') ||
+          url.includes('shine.com/job-search/') ||
+          // Also keep if title looks like a job posting
+          /hiring|apply|opening|vacancy|position|role|engineer|developer|analyst|designer|manager/i.test(title)
+        )
+      })
+      .slice(0, 6)
+      .map((r: any) => ({
+        title: r.title || 'Job Opening',
+        url: r.url,
+        snippet: Array.isArray(r.excerpts) ? r.excerpts[0] : (r.snippet || ''),
+        company: extractCompany(r.title || '', r.url || ''),
+        location: extractLocation(r.title || '', r.excerpts || [])
+      }))
+
+    return jobResults
+  } catch (e) {
+    console.error('Parallel AI fetch error:', e)
+    return []
   }
 }
 
-export function extractJobQuery(message: string): { query: string; objective: string } {
-  const isInternship = /internship|intern|training/i.test(message)
+function buildSearchQueries(message: string, isInternship: boolean): string[] {
+  const msg = message.toLowerCase()
   const type = isInternship ? 'internship' : 'job'
+
+  // Extract role
+  const techRoles = [
+    'python developer', 'java developer', 'react developer', 'node.js developer',
+    'full stack developer', 'frontend developer', 'backend developer', '.net developer',
+    'php developer', 'android developer', 'flutter developer', 'data scientist',
+    'machine learning engineer', 'devops engineer', 'ui ux designer', 'graphic designer',
+    'digital marketing', 'software engineer', 'web developer', 'data analyst',
+    'business analyst', 'content writer', 'seo specialist', 'cloud engineer'
+  ]
+
+  let role = techRoles.find(r => msg.includes(r)) || ''
+  if (!role) {
+    const techs = ['python', 'java', 'react', 'angular', 'node', 'flutter', 'android',
+      'php', '.net', 'devops', 'aws', 'data science', 'machine learning', 'ui ux']
+    const found = techs.find(t => msg.includes(t))
+    role = found ? `${found} ${isInternship ? 'intern' : 'developer'}` : (isInternship ? 'software intern' : 'software developer')
+  }
+
+  const cities = ['nagpur', 'pune', 'mumbai', 'bangalore', 'hyderabad', 'delhi', 'noida', 'chennai', 'remote']
+  const city = cities.find(c => msg.includes(c)) || 'India'
+
+  return [
+    `site:linkedin.com/jobs "${role}" "${city}" apply now 2025`,
+    `site:naukri.com "${role}" ${city} hiring 2025`,
+    `site:internshala.com "${role}" ${type} ${city} 2025`,
+  ]
+}
+
+function extractCompany(title: string, url: string): string {
+  // Try to extract company from title like "Software Engineer at Google"
+  const atMatch = title.match(/at\s+([A-Z][a-zA-Z\s]+?)(?:\s*[-|]|$)/i)
+  if (atMatch) return atMatch[1].trim()
+
+  // From URL domain
+  const domainMatch = url.match(/(?:www\.)?([a-zA-Z0-9-]+)\.(com|in|io|co)/)
+  if (domainMatch && !['linkedin', 'naukri', 'indeed', 'glassdoor', 'internshala'].includes(domainMatch[1])) {
+    return domainMatch[1].charAt(0).toUpperCase() + domainMatch[1].slice(1)
+  }
+  return ''
+}
+
+function extractLocation(title: string, excerpts: string[]): string {
+  const text = title + ' ' + excerpts.join(' ')
+  const cities = ['Nagpur', 'Pune', 'Mumbai', 'Bangalore', 'Hyderabad', 'Delhi', 'Noida', 'Chennai', 'Remote', 'India']
+  return cities.find(c => text.includes(c)) || ''
+}
+
+export function formatJobResults(jobs: JobResult[], agentType: string): string {
+  if (!jobs.length) return ''
+
+  const label = agentType === 'internship' ? 'Internship' : 'Job'
+  const lines = jobs.map((job, i) => {
+    const company = job.company ? ` — *${job.company}*` : ''
+    const location = job.location ? ` 📍 ${job.location}` : ''
+    const snippet = job.snippet ? `\n   > ${job.snippet.slice(0, 120)}...` : ''
+    return `**${i + 1}. [${job.title}](${job.url})**${company}${location}${snippet}`
+  })
+
+  return `\n\n---\n\n### 🔍 Live ${label} Listings\n\n${lines.join('\n\n')}\n\n*Results fetched live — click to apply directly*`
+}
+
+export function extractJobQuery(message: string): { query: string; objective: string } {
+  const isInternship = /internship|intern/i.test(message)
   return {
-    query: `${message} ${type} India 2025 apply`,
-    objective: `Find ${type} openings with direct apply links`
+    query: `${message} ${isInternship ? 'internship' : 'job'} India 2025`,
+    objective: 'Find actual job listings with direct apply links'
   }
 }

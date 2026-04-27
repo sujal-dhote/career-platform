@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import { ArrowLeft, Send, Bot, User, Globe, Paperclip, X, FileText, Image, Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { languages, translations, defaultLanguage, type LanguageCode } from '@/lib/languages'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Message {
   id: string
@@ -438,7 +440,31 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
                 </div>
               )}
               <div className={`max-w-3xl px-4 py-3 rounded-2xl ${message.role === 'user' ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-100'}`}>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">{renderMessageWithLinks(message.content)}</div>
+                <div className="text-sm leading-relaxed prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ href, children }) => (
+                      <a href={href} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline break-all">
+                        {children}
+                      </a>
+                    ),
+                    strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+                    h2: ({ children }) => <h2 className="text-lg font-bold text-orange-400 mt-3 mb-1">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-base font-bold text-orange-300 mt-2 mb-1">{children}</h3>,
+                    hr: () => <hr className="border-slate-600 my-2" />,
+                    ul: ({ children }) => <ul className="space-y-1 my-1">{children}</ul>,
+                    ol: ({ children }) => <ol className="space-y-1 my-1 list-decimal list-inside">{children}</ol>,
+                    li: ({ children }) => <li className="flex gap-2"><span className="text-orange-400 mt-0.5 flex-shrink-0">•</span><span>{children}</span></li>,
+                    blockquote: ({ children }) => <blockquote className="border-l-2 border-orange-500 pl-3 text-slate-400 italic my-1">{children}</blockquote>,
+                    code: ({ children }) => <code className="bg-slate-700 px-1 rounded text-orange-300 text-xs">{children}</code>,
+                    p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                  }}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
                 <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-orange-200' : 'text-slate-400'}`}>
                   {message.timestamp instanceof Date ? message.timestamp.toLocaleTimeString() : new Date(message.timestamp).toLocaleTimeString()}
                 </p>
