@@ -100,7 +100,7 @@ Return format: One translation per line, numbered 1-${messages.length}`
   } catch (error) {
     console.error('Batch translation error:', error)
     return NextResponse.json(
-      { translations: messages || [], targetLanguage: '' },
+      { translations: [], targetLanguage: '' },
       { status: 200 }
     )
   }
