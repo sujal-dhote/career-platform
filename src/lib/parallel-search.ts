@@ -74,31 +74,105 @@ function buildSearchQueries(message: string, isInternship: boolean): string[] {
   const msg = message.toLowerCase()
   const type = isInternship ? 'internship' : 'job'
 
-  // Extract role
-  const techRoles = [
-    'python developer', 'java developer', 'react developer', 'node.js developer',
-    'full stack developer', 'frontend developer', 'backend developer', '.net developer',
-    'php developer', 'android developer', 'flutter developer', 'data scientist',
-    'machine learning engineer', 'devops engineer', 'ui ux designer', 'graphic designer',
-    'digital marketing', 'software engineer', 'web developer', 'data analyst',
-    'business analyst', 'content writer', 'seo specialist', 'cloud engineer'
-  ]
-
-  let role = techRoles.find(r => msg.includes(r)) || ''
-  if (!role) {
-    const techs = ['python', 'java', 'react', 'angular', 'node', 'flutter', 'android',
-      'php', '.net', 'devops', 'aws', 'data science', 'machine learning', 'ui ux']
-    const found = techs.find(t => msg.includes(t))
-    role = found ? `${found} ${isInternship ? 'intern' : 'developer'}` : (isInternship ? 'software intern' : 'software developer')
+  // Extract role — more specific matching
+  const roleMap: Record<string, string> = {
+    'frontend developer': 'frontend developer',
+    'front end developer': 'frontend developer',
+    'front-end developer': 'frontend developer',
+    'frontend engineer': 'frontend engineer',
+    'backend developer': 'backend developer',
+    'back end developer': 'backend developer',
+    'full stack developer': 'full stack developer',
+    'fullstack developer': 'full stack developer',
+    'react developer': 'react developer',
+    'react.js developer': 'react developer',
+    'reactjs developer': 'react developer',
+    'node.js developer': 'node.js developer',
+    'nodejs developer': 'node.js developer',
+    'angular developer': 'angular developer',
+    'vue developer': 'vue.js developer',
+    'python developer': 'python developer',
+    'java developer': 'java developer',
+    '.net developer': '.net developer',
+    'dotnet developer': '.net developer',
+    'php developer': 'php developer',
+    'android developer': 'android developer',
+    'flutter developer': 'flutter developer',
+    'ios developer': 'ios developer',
+    'data scientist': 'data scientist',
+    'data analyst': 'data analyst',
+    'machine learning engineer': 'machine learning engineer',
+    'ml engineer': 'machine learning engineer',
+    'ai engineer': 'ai engineer',
+    'devops engineer': 'devops engineer',
+    'cloud engineer': 'cloud engineer',
+    'aws engineer': 'aws engineer',
+    'ui ux designer': 'ui ux designer',
+    'ui/ux designer': 'ui ux designer',
+    'graphic designer': 'graphic designer',
+    'digital marketing': 'digital marketing executive',
+    'seo specialist': 'seo specialist',
+    'content writer': 'content writer',
+    'business analyst': 'business analyst',
+    'software engineer': 'software engineer',
+    'web developer': 'web developer',
+    'mobile developer': 'mobile developer',
+    'cybersecurity': 'cybersecurity analyst',
   }
+
+  // Find best matching role
+  let role = ''
+  for (const [key, val] of Object.entries(roleMap)) {
+    if (msg.includes(key)) { role = val; break }
+  }
+
+  // Single keyword fallback
+  if (!role) {
+    const singleMap: Record<string, string> = {
+      'frontend': 'frontend developer',
+      'front end': 'frontend developer',
+      'backend': 'backend developer',
+      'back end': 'backend developer',
+      'fullstack': 'full stack developer',
+      'react': 'react developer',
+      'angular': 'angular developer',
+      'vue': 'vue.js developer',
+      'node': 'node.js developer',
+      'python': 'python developer',
+      'java': 'java developer',
+      '.net': '.net developer',
+      'php': 'php developer',
+      'android': 'android developer',
+      'flutter': 'flutter developer',
+      'ios': 'ios developer',
+      'data science': 'data scientist',
+      'machine learning': 'machine learning engineer',
+      'devops': 'devops engineer',
+      'aws': 'aws cloud engineer',
+      'ui ux': 'ui ux designer',
+      'graphic': 'graphic designer',
+      'marketing': 'digital marketing executive',
+      'seo': 'seo specialist',
+      'content': 'content writer',
+    }
+    for (const [key, val] of Object.entries(singleMap)) {
+      if (msg.includes(key)) { role = val; break }
+    }
+  }
+
+  if (!role) role = isInternship ? 'software intern' : 'software developer'
 
   const cities = ['nagpur', 'pune', 'mumbai', 'bangalore', 'hyderabad', 'delhi', 'noida', 'chennai', 'remote']
   const city = cities.find(c => msg.includes(c)) || 'India'
 
+  const roleQuoted = `"${role}"`
+
   return [
-    `site:linkedin.com/jobs "${role}" "${city}" apply now 2025`,
-    `site:naukri.com "${role}" ${city} hiring 2025`,
-    `site:internshala.com "${role}" ${type} ${city} 2025`,
+    `site:linkedin.com/jobs ${roleQuoted} ${city} ${type} 2025`,
+    `site:naukri.com ${roleQuoted} ${city} hiring 2025`,
+    isInternship
+      ? `site:internshala.com ${roleQuoted} internship ${city} 2025`
+      : `site:indeed.com ${roleQuoted} ${city} apply 2025`,
   ]
 }
 
