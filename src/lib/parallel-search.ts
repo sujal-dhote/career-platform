@@ -54,7 +54,10 @@ export async function searchJobs(query: string, objective: string): Promise<stri
     const formatted = results
       .filter(r => r.url && r.title)
       .slice(0, 6)
-      .map((r, i) => `${i + 1}. **[${r.title}](${r.url})**\n   ${r.snippet || ''}`)
+      .map((r, i) => {
+        const snippet = r.snippet || (Array.isArray((r as any).excerpts) ? (r as any).excerpts[0] : '') || ''
+        return `${i + 1}. **[${r.title}](${r.url})**\n   ${snippet}`
+      })
       .join('\n\n')
 
     return formatted
