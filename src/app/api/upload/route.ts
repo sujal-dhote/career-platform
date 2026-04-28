@@ -14,7 +14,7 @@ function getGenAI(keyIndex = 0) {
   return new GoogleGenerativeAI(apiKeys[keyIndex % apiKeys.length])
 }
 
-const resumePrompt = `You are an expert Resume Analyzer. Analyze this resume and provide a detailed report:
+const resumePrompt = `You are an expert Resume Analyzer. Carefully read the uploaded resume document and provide a detailed report:
 
 ## 📋 Resume Analyzer – Result Report
 
@@ -60,28 +60,10 @@ const resumePrompt = `You are an expert Resume Analyzer. Analyze this resume and
 
 ---
 ### ✅ Final Feedback
-**💪 Strengths:** [3 strengths]
-**📈 Improvements:** [3 improvements]`
+**💪 Strengths:** [3 specific strengths from the resume]
+**📈 Improvements:** [3 specific improvements needed]`
 
-// Extract readable text from PDF buffer (basic extraction)
-function extractTextFromBuffer(buffer: Buffer, mimeType: string): string {
-  try {
-    const raw = buffer.toString('latin1')
-    // Extract text between BT and ET markers (PDF text objects)
-    const textMatches = raw.match(/BT[\s\S]*?ET/g) || []
-    let extracted = ''
-    for (const block of textMatches) {
-      const strings = block.match(/\(([^)]+)\)/g) || []
-      extracted += strings.map(s => s.slice(1, -1)).join(' ') + '\n'
-    }
-    // Also try UTF-8 readable parts
-    const utf8 = buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t\u0900-\u097F]/g, ' ')
-    const combined = (extracted + ' ' + utf8).replace(/\s+/g, ' ').trim()
-    return combined.slice(0, 6000)
-  } catch {
-    return buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim().slice(0, 6000)
-  }
-}
+const ATS_TEMPLATE_MSG = `\n\n---\n\n### 📥 Download ATS-Friendly Resume Template\n\nImprove your resume using this professionally designed ATS-optimized template:\n\n**[⬇️ Download ATS Resume Template (PDF)](https://career-platform-omega.vercel.app/ats-resume-template.pdf)**\n\n> This template follows all ATS best practices — clean formatting, proper sections, keyword-optimized structure.`
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,10 +88,24 @@ export async function POST(request: NextRequest) {
       /resume|cv/i.test(file.name) ||
       /resume|cv|curriculum/i.test(question)
 
-    const isImage = file.type.startsWith('image/')
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+    const base64 = buffer.toString('base64')
 
+    // All files — send as inline data directly to Gemini
+    // Gemini natively supports: PDF, images, text, Word docs
+    let mimeType = file.type as string
+    // Fix Word doc mime type — treat as PDF for Gemini
+    if (mimeType === 'application/msword' ||
+        mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      mimeType = 'application/pdf'
+    }
+
+    const promptText = isResume
+      ? resumePrompt
+      : `You are a helpful career assistant. ${question}`
+
+    // Use gemini-2.0-flash first — best for document reading
     const models = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.0-flash-lite']
     let response = ''
 
@@ -117,23 +113,15 @@ export async function POST(request: NextRequest) {
       for (const modelName of models) {
         try {
           const model = getGenAI(keyIdx).getGenerativeModel({ model: modelName })
-          let result
-
-          if (isImage) {
-            // Images — use inline data (fast for images)
-            result = await model.generateContent([
-              { inlineData: { mimeType: file.type as any, data: buffer.toString('base64') } },
-              { text: isResume ? resumePrompt : `You are a helpful career assistant. ${question}` }
-            ])
-          } else {
-            // PDF/Word/Text — extract text and send as text prompt (much faster)
-            const textContent = extractTextFromBuffer(buffer, file.type)
-            const prompt = isResume
-              ? `${resumePrompt}\n\n---\nResume Text Content:\n${textContent}`
-              : `You are a helpful career assistant. ${question}\n\nFile content:\n${textContent}`
-            result = await model.generateContent(prompt)
-          }
-
+          const result = await model.generateContent([
+            {
+              inlineData: {
+                mimeType: mimeType as any,
+                data: base64
+              }
+            },
+            { text: promptText }
+          ])
           response = result.response.text()
           if (response) break
         } catch (e: any) {
@@ -157,9 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      response: isResume
-        ? response + '\n\n---\n\n### 📥 Download ATS-Friendly Resume Template\n\nImprove your resume using this professionally designed ATS-optimized template:\n\n**[⬇️ Download ATS Resume Template (PDF)](https://career-platform-omega.vercel.app/ats-resume-template.pdf)**\n\n> This template follows all ATS best practices — clean formatting, proper sections, keyword-optimized structure.'
-        : response,
+      response: isResume ? response + ATS_TEMPLATE_MSG : response,
       fileName: file.name
     })
 
