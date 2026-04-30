@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ArrowLeft, Send, Bot, User, Globe, Paperclip, X, FileText, Image, Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Send, Bot, User, Globe, Paperclip, X, FileText, Image, Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { languages, translations, defaultLanguage, type LanguageCode } from '@/lib/languages'
 import ReactMarkdown from 'react-markdown'
@@ -27,6 +27,7 @@ interface ChatSession {
 interface ChatInterfaceProps {
   agentType: string
   onBack: () => void
+  onAgentChange?: (agentType: string) => void
 }
 
 const agentNames: Record<string, string> = {
@@ -73,7 +74,7 @@ function ThinkingIndicator({ isFile, agentType }: { isFile: boolean; agentType: 
   )
 }
 
-export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps) {
+export default function ChatInterface({ agentType, onBack, onAgentChange }: ChatInterfaceProps) {
   const { data: session } = useSession()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -106,7 +107,7 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
   useEffect(() => { loadSessions() }, [])
 
   // Load a specific session's messages
-  const loadSession = async (sid: string) => {
+  const loadSession = async (sid: string, sessionAgentType?: string) => {
     setLoadingHistory(true)
     try {
       const res = await fetch(`/api/chat/sessions/${sid}`)
@@ -120,6 +121,11 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
         }))
         setMessages(msgs)
         setSessionId(sid)
+        // Switch to correct agent type if different
+        const targetAgent = sessionAgentType || data.session.agentType
+        if (targetAgent && targetAgent !== agentType && onAgentChange) {
+          onAgentChange(targetAgent)
+        }
       }
     } catch (e) { console.error('Failed to load session', e) }
     finally { setLoadingHistory(false) }
@@ -309,6 +315,166 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
 
   const handleSend = () => { if (selectedFile) handleFileUpload(); else sendMessage() }
 
+  const exportChatAsPDF = async () => {
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const agentName = agentNames[agentType] || agentType
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 18
+    const contentWidth = pageWidth - margin * 2
+    let y = margin
+
+    const checkNewPage = (needed: number) => {
+      if (y + needed > pageHeight - 15) {
+        doc.addPage()
+        y = margin
+      }
+    }
+
+    const cleanText = (text: string) =>
+      text
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{2600}-\u{27BF}]/gu, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/#{1,4}\s+/g, '')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 -> $2')
+        .replace(/^[-*•]\s+/gm, '• ')
+        .replace(/---+/g, '')
+        .replace(/>\s*/gm, '')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/&rsquo;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+
+    // ── PAGE HEADER (only first page) ──
+    doc.setFillColor(234, 88, 12)
+    doc.rect(0, 0, pageWidth, 22, 'F')
+
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    doc.text(agentName, margin, 10)
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Chat Export  |  ' + new Date().toLocaleString('en-IN'), margin, 17)
+
+    y = 30
+
+    // ── MESSAGES ──
+    const chatMessages = messages.filter(m => m.id !== '1')
+
+    chatMessages.forEach((msg) => {
+      const isUser = msg.role === 'user'
+      const time = new Date(msg.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      const clean = cleanText(msg.content)
+      const lines = doc.splitTextToSize(clean, contentWidth - 4)
+
+      // Estimate block height: label(6) + lines + padding(6)
+      const blockH = 6 + lines.length * 5.5 + 8
+      checkNewPage(blockH + 6)
+
+      if (isUser) {
+        // ── USER MESSAGE ──
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor(234, 88, 12)
+        doc.text('You', margin, y)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text(time, pageWidth - margin, y, { align: 'right' })
+        y += 5
+
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(10)
+        doc.setTextColor(30, 30, 30)
+        lines.forEach((line: string) => {
+          checkNewPage(6)
+          doc.text(line, margin, y)
+          y += 5.5
+        })
+
+        // Divider
+        y += 3
+        doc.setDrawColor(234, 88, 12)
+        doc.setLineWidth(0.3)
+        doc.line(margin, y, pageWidth - margin, y)
+        y += 5
+
+      } else {
+        // ── AGENT MESSAGE ──
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor(30, 100, 200)
+        doc.text(agentName, margin, y)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text(time, pageWidth - margin, y, { align: 'right' })
+        y += 5
+
+        // Render lines — detect URLs for blue color
+        const urlRegex = /https?:\/\/[^\s)>]+/g
+        doc.setFontSize(10)
+
+        lines.forEach((line: string) => {
+          checkNewPage(6)
+
+          // Check if line contains URL
+          const urlMatch = line.match(urlRegex)
+          if (urlMatch) {
+            // Render URL in blue
+            doc.setTextColor(37, 99, 235)
+            doc.setFont('helvetica', 'normal')
+            doc.text(line, margin, y)
+            // Add clickable link
+            const url = urlMatch[0]
+            const textWidth = doc.getTextWidth(line)
+            doc.link(margin, y - 4, textWidth, 5, { url })
+          } else if (line.startsWith('•')) {
+            doc.setTextColor(60, 60, 60)
+            doc.setFont('helvetica', 'normal')
+            doc.text(line, margin + 2, y)
+          } else {
+            doc.setTextColor(30, 30, 30)
+            doc.setFont('helvetica', 'normal')
+            doc.text(line, margin, y)
+          }
+          y += 5.5
+        })
+
+        // Divider
+        y += 3
+        doc.setDrawColor(200, 200, 200)
+        doc.setLineWidth(0.2)
+        doc.line(margin, y, pageWidth - margin, y)
+        y += 5
+      }
+    })
+
+    // ── FOOTER on all pages ──
+    const totalPages = (doc as any).internal.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.setFont('helvetica', 'normal')
+      doc.text(
+        `Page ${i} of ${totalPages}  |  ${agentName}  |  Career Platform`,
+        pageWidth / 2,
+        pageHeight - 6,
+        { align: 'center' }
+      )
+    }
+
+    doc.save(`${agentName.replace(/\s+/g, '-')}-chat-${Date.now()}.pdf`)
+  }
+
   const renderMessageWithLinks = (text: string) => {
     const lines = text.split('\n')
     const urlRegex = /(https?:\/\/[^\s]+)/g
@@ -354,12 +520,24 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
           {chatSessions.map(s => (
             <div
               key={s.id}
-              onClick={() => loadSession(s.id)}
+              onClick={() => loadSession(s.id, s.agentType)}
               className={`group flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors mb-1 ${sessionId === s.id ? 'bg-slate-700' : 'hover:bg-slate-700/60'}`}
             >
               <MessageSquare className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-slate-300 truncate">{s.title}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                    s.agentType === 'company' ? 'bg-blue-600/20 text-blue-400' :
+                    s.agentType === 'internship' ? 'bg-green-600/20 text-green-400' :
+                    s.agentType === 'job' ? 'bg-purple-600/20 text-purple-400' :
+                    s.agentType === 'career_consultant' ? 'bg-orange-600/20 text-orange-400' :
+                    s.agentType === 'resume_analyzer' ? 'bg-pink-600/20 text-pink-400' :
+                    'bg-slate-600/20 text-slate-400'
+                  }`}>
+                    {agentNames[s.agentType] || s.agentType}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500">{s._count.messages} msgs · {new Date(s.updatedAt).toLocaleDateString()}</p>
               </div>
               <button
@@ -394,6 +572,11 @@ export default function ChatInterface({ agentType, onBack }: ChatInterfaceProps)
               <button onClick={startNewChat} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors">
                 <Plus className="w-3.5 h-3.5" /> New Chat
               </button>
+              {messages.length > 1 && (
+                <button onClick={exportChatAsPDF} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors" title="Export chat as PDF">
+                  <Download className="w-3.5 h-3.5" /> Export PDF
+                </button>
+              )}
               {/* Language Selector */}
               <div className="relative">
                 <button onClick={() => setShowLanguageMenu(!showLanguageMenu)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
